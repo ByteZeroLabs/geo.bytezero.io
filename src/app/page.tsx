@@ -14,7 +14,8 @@ import {
   ChevronRightIcon,
   ClockIcon,
   ServerIcon,
-  ArrowPathIcon
+  ArrowPathIcon,
+  ExclamationCircleIcon
 } from "@heroicons/react/24/outline"
 import Image from "next/image"
 
@@ -22,8 +23,8 @@ interface ResultItem {
   api: string
   data: any
   time: string
-  lat: number
-  lng: number
+  lat: number | null
+  lng: number | null
 }
 
 import LogoRect from "@/assets/rectangle.svg"
@@ -76,15 +77,22 @@ export default function Home() {
     return () => m.remove()
   }, [])
 
-  function goToLocation(lat: number, lng: number) {
-    if (map) {
-      map.flyTo({ center: [lng, lat], zoom: 9, speed: 1.2, curve: 1.4 })
-    }
+  function goToLocation(lat: number | null, lng: number | null) {
+    if (lat === null || lng === null || !map) return;
+    
+    map.flyTo({
+      center: [lng, lat],
+      zoom: 8,
+      speed: 1.5,
+      curve: 1.5
+    })
   }
 
-  function toggleCard(index: number, lat: number, lng: number) {
-    goToLocation(lat, lng)
+  function toggleCard(index: number, lat: number | null, lng: number | null) {
     setExpandedCard(expandedCard === index ? null : index)
+    if (lat !== null && lng !== null) {
+      goToLocation(lat, lng)
+    }
   }
 
   function getLocationInfo(data: any) {
@@ -138,19 +146,26 @@ export default function Home() {
             data?.location?.lat ||
             data?.location?.latitude ||
             data?.data?.location?.latitude ||
-            (data.loc ? data.loc.split(",")[0] : 0)
+            (data.loc ? data.loc.split(",")[0] : null)
           const lng =
             data.longitude ||
             data.lon ||
             data?.location?.lng ||
             data?.location?.longitude ||
             data?.data?.location?.longitude ||
-            (data.loc ? data.loc.split(",")[1] : 0)
-          if (lat && lng) {
+            (data.loc ? data.loc.split(",")[1] : null)
+          
+          // Ensure both lat and lng are valid numbers before using them
+          const validLat = lat !== null && lat !== undefined && !isNaN(Number(lat))
+          const validLng = lng !== null && lng !== undefined && !isNaN(Number(lng))
+          
+          if (validLat && validLng) {
+            const numLat = Number(lat)
+            const numLng = Number(lng)
             foundResults = true
             if (firstCenter) {
               map.flyTo({
-                center: [+lng, +lat],
+                center: [numLng, numLat],
                 zoom: 8,
                 speed: 1.5,
                 curve: 1.5
@@ -171,7 +186,7 @@ export default function Home() {
               </div>
             `
             new maplibregl.Marker({ element: el })
-              .setLngLat([+lng, +lat])
+              .setLngLat([numLng, numLat])
               .setPopup(
                 new maplibregl.Popup({ offset: 25, className: "custom-popup" }).setHTML(`
                     <div class="text-slate-800">
@@ -187,8 +202,21 @@ export default function Home() {
                 api,
                 data,
                 time: (tEnd - tStart).toFixed(0),
-                lat: +lat,
-                lng: +lng
+                lat: numLat,
+                lng: numLng
+              }
+            ])
+          } else {
+            console.log(`No valid coordinates found for ${api}:`, { lat, lng })
+            // Add the result to the list but mark it as invalid location
+            setResults((prev) => [
+              ...prev,
+              {
+                api,
+                data,
+                time: (tEnd - tStart).toFixed(0),
+                lat: null,
+                lng: null
               }
             ])
           }
@@ -420,8 +448,9 @@ export default function Home() {
                                     </span>
                                   </div>
                                 ) : (
-                                  <div className="text-slate-400 text-xs">
-                                    Location data available
+                                  <div className="flex items-center text-red-500 text-xs">
+                                    <ExclamationCircleIcon className="w-3.5 h-3.5 mr-1 flex-shrink-0" />
+                                    <span>No location data available</span>
                                   </div>
                                 )}
                               </div>
@@ -441,8 +470,13 @@ export default function Home() {
                                   e.stopPropagation()
                                   goToLocation(r.lat, r.lng)
                                 }}
-                                className="mr-3 flex items-center justify-center w-9 h-9 rounded-lg bg-slate-50 hover:bg-primary-50 border border-slate-200 hover:border-primary-200 transition-colors shadow-sm"
-                                title="Center on map"
+                                disabled={!r.lat || !r.lng}
+                                className={`mr-3 flex items-center justify-center w-9 h-9 rounded-lg ${
+                                  r.lat && r.lng
+                                    ? "bg-slate-50 hover:bg-primary-50 border border-slate-200 hover:border-primary-200"
+                                    : "bg-slate-50 border border-slate-200 opacity-50 cursor-not-allowed"
+                                } transition-colors shadow-sm`}
+                                title={r.lat && r.lng ? "Center on map" : "No location data"}
                               >
                                 <MapPinIcon className="h-4 w-4 text-primary-500" />
                               </motion.button>
